@@ -130,95 +130,138 @@
 </main>
 
 <script>
-    const extensions = {
-        pdf: ['pdf'],
-        image: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'],
-        audio: ['mp3', 'wav', 'ogg', 'm4a', 'wma']
-    };
+    // --- CONFIGURATION ---
+const username = 'dmukherjeetextiles'; 
+const repo = 'learning-french.github.io';     
+const branch = 'main';             
+// ---------------------
 
-    async function init() {
-        const response = await fetch('/api/files');
-        const data = await response.json();
-        const treeContainer = document.getElementById('file-tree');
+const extensions = {
+    pdf: ['pdf'],
+    image: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'],
+    audio: ['mp3', 'wav', 'ogg', 'm4a', 'wma']
+};
+
+async function fetchGitHubFiles(path = 'materials') {
+    const url = `https://api.github.com/repos/${username}/${repo}/contents/${path}?ref=${branch}`;
+    const response = await fetch(url);
+    const items = await response.json();
+    
+    let nodes = [];
+
+    for (let item of items) {
+        if (item.type === 'dir') {
+            // It's a folder, get its children recursively
+            const children = await fetchGitHubFiles(item.path);
+            nodes.push({
+                name: item.name,
+                type: 'folder',
+                children: children
+            });
+        } else {
+            // It's a file
+            nodes.push({
+                name: item.name,
+                type: 'file',
+                path: item.download_url, // Direct link to the file on GitHub
+                rawPath: item.path
+            });
+        }
+    }
+    return nodes;
+}
+
+async function init() {
+    const treeContainer = document.getElementById('file-tree');
+    treeContainer.innerHTML = 'Loading from GitHub...';
+    
+    try {
+        const data = await fetchGitHubFiles(); // Starts scanning the 'materials' folder
         treeContainer.innerHTML = '';
         renderTree(data, treeContainer);
         lucide.createIcons();
+    } catch (error) {
+        treeContainer.innerHTML = 'Error loading files. Check username/repo name.';
+        console.error(error);
     }
+}
 
-    function getFileType(filename) {
-        const ext = filename.split('.').pop().toLowerCase();
-        if (extensions.pdf.includes(ext)) return 'pdf';
-        if (extensions.image.includes(ext)) return 'image';
-        if (extensions.audio.includes(ext)) return 'audio';
-        return 'unknown';
-    }
+function getFileType(filename) {
+    const ext = filename.split('.').pop().toLowerCase();
+    if (extensions.pdf.includes(ext)) return 'pdf';
+    if (extensions.image.includes(ext)) return 'image';
+    if (extensions.audio.includes(ext)) return 'audio';
+    return 'unknown';
+}
 
-    function renderTree(nodes, parentElement) {
-        nodes.forEach(node => {
-            const container = document.createElement('div');
-            container.className = 'tree-item';
+function renderTree(nodes, parentElement) {
+    // Sort folders first, then files
+    nodes.sort((a, b) => (b.type === 'folder') - (a.type === 'folder'));
 
-            if (node.type === 'folder') {
-                const row = document.createElement('div');
-                row.className = 'folder-row';
-                row.innerHTML = `<i data-lucide="chevron-right" class="chevron"></i><i data-lucide="folder" style="color: var(--accent); width:18px"></i><span>${node.name}</span>`;
+    nodes.forEach(node => {
+        const container = document.createElement('div');
+        container.className = 'tree-item';
 
-                const childGroup = document.createElement('div');
-                childGroup.className = 'hidden';
-                row.onclick = () => {
-                    const isHidden = childGroup.classList.toggle('hidden');
-                    row.querySelector('.chevron').classList.toggle('rotate', !isHidden);
-                };
-                container.appendChild(row);
-                container.appendChild(childGroup);
-                renderTree(node.children, childGroup);
-            } else {
-                const type = getFileType(node.name);
-                let icon = 'file';
-                if (type === 'pdf') icon = 'file-text';
-                if (type === 'image') icon = 'image';
-                if (type === 'audio') icon = 'headphones';
+        if (node.type === 'folder') {
+            const row = document.createElement('div');
+            row.className = 'folder-row';
+            row.innerHTML = `<i data-lucide="chevron-right" class="chevron"></i><i data-lucide="folder" style="color: var(--accent); width:18px"></i><span>${node.name}</span>`;
 
-                const row = document.createElement('div');
-                row.className = 'file-row';
-                row.innerHTML = `<i data-lucide="${icon}" style="width:16px"></i><span>${node.name}</span>`;
-                row.onclick = () => {
-                    document.querySelectorAll('.file-row').forEach(r => r.classList.remove('active'));
-                    row.classList.add('active');
-                    openFile(node.path, node.name, type);
-                };
-                container.appendChild(row);
-            }
-            parentElement.appendChild(container);
-        });
-    }
+            const childGroup = document.createElement('div');
+            childGroup.className = 'hidden';
+            row.onclick = () => {
+                const isHidden = childGroup.classList.toggle('hidden');
+                row.querySelector('.chevron').classList.toggle('rotate', !isHidden);
+            };
+            container.appendChild(row);
+            container.appendChild(childGroup);
+            renderTree(node.children, childGroup);
+        } else {
+            const type = getFileType(node.name);
+            let icon = 'file';
+            if (type === 'pdf') icon = 'file-text';
+            if (type === 'image') icon = 'image';
+            if (type === 'audio') icon = 'headphones';
 
-    function openFile(path, name, type) {
-        const pdfViewer = document.getElementById('pdf-viewer');
-        const imgViewer = document.getElementById('image-viewer');
-        const audioPlayer = document.getElementById('audio-player');
-
-        // Reset views
-        pdfViewer.classList.remove('show');
-        imgViewer.classList.remove('show');
-
-        if (type === 'pdf') {
-            pdfViewer.src = path;
-            pdfViewer.classList.add('show');
-        } 
-        else if (type === 'image') {
-            imgViewer.src = path;
-            imgViewer.classList.add('show');
-        } 
-        else if (type === 'audio') {
-            document.getElementById('current-title').innerText = name;
-            audioPlayer.src = path;
-            audioPlayer.play();
-            // Keep the current PDF/Image visible while audio plays
+            const row = document.createElement('div');
+            row.className = 'file-row';
+            row.innerHTML = `<i data-lucide="${icon}" style="width:16px"></i><span>${node.name}</span>`;
+            row.onclick = () => {
+                document.querySelectorAll('.file-row').forEach(r => r.classList.remove('active'));
+                row.classList.add('active');
+                openFile(node.path, node.name, type);
+            };
+            container.appendChild(row);
         }
-    }
+        parentElement.appendChild(container);
+    });
+}
 
-    init();
+function openFile(path, name, type) {
+    const pdfViewer = document.getElementById('pdf-viewer');
+    const imgViewer = document.getElementById('image-viewer');
+    const audioPlayer = document.getElementById('audio-player');
+
+    pdfViewer.classList.remove('show');
+    imgViewer.classList.remove('show');
+
+    if (type === 'pdf') {
+        // Use Google Docs viewer to bypass some PDF embed restrictions
+        pdfViewer.src = `https://docs.google.com/viewer?url=${encodeURIComponent(path)}&embedded=true`;
+        pdfViewer.classList.add('show');
+    } 
+    else if (type === 'image') {
+        imgViewer.src = path;
+        imgViewer.classList.add('show');
+    } 
+    else if (type === 'audio') {
+        document.getElementById('current-title').innerText = name;
+        audioPlayer.src = path;
+        audioPlayer.play();
+    }
+}
+
+init();
 </script>
 </body>
 </html>
